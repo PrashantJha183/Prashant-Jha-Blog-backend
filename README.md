@@ -90,7 +90,6 @@ POST /api/auth/refresh-token
 | Editor | Create & edit blogs  |
 | Writer | Create blogs         |
 | User   | View blogs only      |
-| Public | View published blogs |
 
 RBAC is enforced using:
 
