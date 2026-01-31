@@ -1,4 +1,4 @@
-# Production‑Grade Blog Platform (MERN‑Style Backend)
+# Prashant Jha Blog Platform 
 
 A **secure, scalable, production‑ready backend** built with **Node.js, Express, Supabase, JWT, Email OTP, RBAC**, and **Swagger API Docs**.
 
