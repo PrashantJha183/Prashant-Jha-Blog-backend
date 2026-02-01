@@ -39,7 +39,11 @@ const LOGIN_ALLOWED_ROLES = ["admin", "editor", "writer"];
    Send OTP (LOGIN ONLY)
 ========================= */
 export const sendOtpService = async (email) => {
-  // Check user exists
+  console.log("📩 sendOtpService called with:", email);
+
+  /* =========================
+     1. Check user exists
+  ========================= */
   const { data: user, error } = await supabase
     .from("profiles")
     .select("id, role")
@@ -47,23 +51,33 @@ export const sendOtpService = async (email) => {
     .single();
 
   if (error || !user) {
-    throw new Error(
-      "Access denied. This email is not registered in the system.",
-    );
+    console.error("❌ User not found:", email);
+    throw new Error("Access denied. This email is not registered.");
   }
 
-  // Role validation
+  console.log("✅ User found:", user.id, "Role:", user.role);
+
+  /* =========================
+     2. Role validation
+  ========================= */
   if (!LOGIN_ALLOWED_ROLES.includes(user.role)) {
-    throw new Error("Access denied. Role is not allowed to login.");
+    console.error("❌ Role not allowed:", user.role);
+    throw new Error("Access denied. Role is not allowed.");
   }
 
-  // Generate OTP
+  /* =========================
+     3. Generate OTP
+  ========================= */
   const otp = generateOtp();
   const expiresAt = new Date(
     Date.now() + Number(process.env.OTP_EXPIRY_MINUTES) * 60 * 1000,
   );
 
-  // Store OTP
+  console.log("🔐 OTP generated for:", email);
+
+  /* =========================
+     4. Store OTP
+  ========================= */
   const { error: otpError } = await supabase.from("email_otps").upsert({
     email,
     otp_hash: hashOtp(otp),
@@ -71,19 +85,37 @@ export const sendOtpService = async (email) => {
     attempts: 0,
   });
 
-  if (otpError) throw otpError;
+  if (otpError) {
+    console.error("❌ OTP DB error:", otpError);
+    throw otpError;
+  }
 
-  // Send Email
-  await transporter.sendMail({
-    from: `"Blog Auth" <${process.env.SMTP_USER}>`,
-    to: email,
-    subject: "Your Login OTP",
-    html: `
-      <h2>Blog System Login</h2>
-      <h1>${otp}</h1>
-      <p>This OTP expires in ${process.env.OTP_EXPIRY_MINUTES} minutes.</p>
-    `,
-  });
+  console.log("💾 OTP saved in DB for:", email);
+
+  /* =========================
+     5. Send Email (THIS IS WHERE PROD FAILS)
+  ========================= */
+  console.log("➡️ Connecting to SMTP…");
+
+  await Promise.race([
+    transporter.sendMail({
+      from: `"Blog Auth" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: "Your Login OTP",
+      html: `
+        <h2>Blog System Login</h2>
+        <h1>${otp}</h1>
+        <p>This OTP expires in ${process.env.OTP_EXPIRY_MINUTES} minutes.</p>
+      `,
+    }),
+
+    // ⏱️ Timeout safety (VERY IMPORTANT)
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("SMTP timeout after 5 seconds")), 5000),
+    ),
+  ]);
+
+  console.log("✅ OTP email sent to:", email);
 
   return { message: "OTP sent successfully" };
 };
