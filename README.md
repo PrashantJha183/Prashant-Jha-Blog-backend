@@ -1,4 +1,4 @@
-# Prashant Jha Blog Platform 
+# Prashant Jha Blog Platform
 
 A **secure, scalable, production‑ready backend** built with **Node.js, Express, Supabase, JWT, Email OTP, RBAC**, and **Swagger API Docs**.
 
@@ -84,12 +84,12 @@ POST /api/auth/refresh-token
 
 ## Role‑Based Access Control (RBAC)
 
-| Role   | Permissions          |
-| ------ | -------------------- |
-| Admin  | Full system access   |
-| Editor | Create & edit blogs  |
-| Writer | Create blogs         |
-| User   | View blogs only      |
+| Role   | Permissions         |
+| ------ | ------------------- |
+| Admin  | Full system access  |
+| Editor | Create & edit blogs |
+| Writer | Create blogs        |
+| User   | View blogs only     |
 
 RBAC is enforced using:
 
