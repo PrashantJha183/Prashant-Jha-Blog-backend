@@ -47,10 +47,10 @@ const requiredEnvVars = [
   /* -------------------------
      SMTP (NodeMailer)
   -------------------------- */
-  "SMTP_HOST",
-  "SMTP_PORT",
-  "SMTP_USER",
-  "SMTP_PASS",
+  //   "SMTP_HOST",
+  //   "SMTP_PORT",
+  //   "SMTP_USER",
+  //   "SMTP_PASS",
 ];
 
 /**

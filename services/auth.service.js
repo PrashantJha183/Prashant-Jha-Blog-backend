@@ -1,20 +1,12 @@
 import { supabase } from "../config/supabase.js";
 import crypto from "crypto";
-import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
+import { Resend } from "resend";
 
 /* =========================
-   Mail transporter
+   Resend Client
 ========================= */
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT || 587),
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 /* =========================
    Helpers
@@ -41,9 +33,7 @@ const LOGIN_ALLOWED_ROLES = ["admin", "editor", "writer"];
 export const sendOtpService = async (email) => {
   console.log("📩 sendOtpService called with:", email);
 
-  /* =========================
-     1. Check user exists
-  ========================= */
+  /* 1️⃣ Check user exists */
   const { data: user, error } = await supabase
     .from("profiles")
     .select("id, role")
@@ -51,33 +41,22 @@ export const sendOtpService = async (email) => {
     .single();
 
   if (error || !user) {
-    console.error("❌ User not found:", email);
-    throw new Error("Access denied. This email is not registered.");
+    throw new Error(
+      "Access denied. This email is not registered in the system.",
+    );
   }
 
-  console.log("✅ User found:", user.id, "Role:", user.role);
-
-  /* =========================
-     2. Role validation
-  ========================= */
   if (!LOGIN_ALLOWED_ROLES.includes(user.role)) {
-    console.error("❌ Role not allowed:", user.role);
-    throw new Error("Access denied. Role is not allowed.");
+    throw new Error("Access denied. Role is not allowed to login.");
   }
 
-  /* =========================
-     3. Generate OTP
-  ========================= */
+  /* 2️⃣ Generate OTP */
   const otp = generateOtp();
   const expiresAt = new Date(
     Date.now() + Number(process.env.OTP_EXPIRY_MINUTES) * 60 * 1000,
   );
 
-  console.log("🔐 OTP generated for:", email);
-
-  /* =========================
-     4. Store OTP
-  ========================= */
+  /* 3️⃣ Store OTP */
   const { error: otpError } = await supabase.from("email_otps").upsert({
     email,
     otp_hash: hashOtp(otp),
@@ -85,37 +64,33 @@ export const sendOtpService = async (email) => {
     attempts: 0,
   });
 
-  if (otpError) {
-    console.error("❌ OTP DB error:", otpError);
-    throw otpError;
-  }
+  if (otpError) throw otpError;
 
-  console.log("💾 OTP saved in DB for:", email);
-
-  /* =========================
-     5. Send Email (THIS IS WHERE PROD FAILS)
-  ========================= */
-  console.log("➡️ Connecting to SMTP…");
-
-  await Promise.race([
-    transporter.sendMail({
-      from: `"Blog Auth" <${process.env.SMTP_USER}>`,
+  /* 4️⃣ Send OTP Email (RESEND) */
+  try {
+    await resend.emails.send({
+      from: "Blog Auth <onboarding@resend.dev>",
       to: email,
       subject: "Your Login OTP",
       html: `
-        <h2>Blog System Login</h2>
-        <h1>${otp}</h1>
-        <p>This OTP expires in ${process.env.OTP_EXPIRY_MINUTES} minutes.</p>
+        <div style="font-family: Arial, sans-serif">
+          <h2>Blog System Login</h2>
+          <p>Your OTP is:</p>
+          <h1 style="letter-spacing:4px">${otp}</h1>
+          <p>
+            This OTP expires in
+            <strong>${process.env.OTP_EXPIRY_MINUTES} minutes</strong>.
+          </p>
+          <p>If you didn’t request this, ignore this email.</p>
+        </div>
       `,
-    }),
+    });
 
-    // ⏱️ Timeout safety (VERY IMPORTANT)
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("SMTP timeout after 5 seconds")), 5000),
-    ),
-  ]);
-
-  console.log("✅ OTP email sent to:", email);
+    console.log("✅ OTP email sent via Resend to:", email);
+  } catch (error) {
+    console.error("❌ Resend email failed:", error);
+    throw new Error("Failed to send OTP email");
+  }
 
   return { message: "OTP sent successfully" };
 };
@@ -124,7 +99,6 @@ export const sendOtpService = async (email) => {
    Verify OTP + ISSUE TOKENS
 ========================= */
 export const verifyOtpService = async ({ email, otp }) => {
-  // Fetch OTP
   const { data: otpRow, error } = await supabase
     .from("email_otps")
     .select("*")
@@ -135,12 +109,10 @@ export const verifyOtpService = async ({ email, otp }) => {
     throw new Error("Invalid or expired OTP");
   }
 
-  // Expiry check
   if (new Date(otpRow.expires_at) < new Date()) {
     throw new Error("OTP expired");
   }
 
-  // Validate OTP
   if (otpRow.otp_hash !== hashOtp(otp)) {
     await supabase
       .from("email_otps")
@@ -150,7 +122,6 @@ export const verifyOtpService = async ({ email, otp }) => {
     throw new Error("Invalid OTP");
   }
 
-  // Fetch EXISTING USER
   const { data: user, error: userError } = await supabase
     .from("profiles")
     .select("id, email, name, role")
@@ -161,15 +132,12 @@ export const verifyOtpService = async ({ email, otp }) => {
     throw new Error("Access denied. User not found.");
   }
 
-  // Role validation
   if (!LOGIN_ALLOWED_ROLES.includes(user.role)) {
-    throw new Error("Access denied. Role is not allowed to login.");
+    throw new Error("Access denied. Role not allowed.");
   }
 
-  // Cleanup OTP
   await supabase.from("email_otps").delete().eq("email", email);
 
-  // Issue tokens
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken();
 
@@ -217,7 +185,6 @@ export const refreshTokenService = async (refreshToken) => {
 
   const user = data.profiles;
 
-  // Extra safety
   if (!LOGIN_ALLOWED_ROLES.includes(user.role)) {
     throw new Error("Access denied");
   }
