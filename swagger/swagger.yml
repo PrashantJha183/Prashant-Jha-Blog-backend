@@ -13,7 +13,7 @@ info:
 
 servers:
   - url: prashant-jha-blog-backend-production.up.railway.app/api
-    description: Local server
+    description: Production server
 
 tags:
   - name: Auth
