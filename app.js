@@ -10,7 +10,7 @@ import { apiLimiter } from "./middlewares/apiLimiter.middleware.js";
 import adminRoutes from "./routes/admin.routes.js";
 import healthRoutes from "./routes/health.routes.js";
 import authRoutes from "./routes/auth.routes.js";
-import blogRoutes from "./routes/blog.routes.js";
+import blogRoutes from "./routes/admin.blog.routes.js";
 import publicRoutes from "./routes/publicBlog.routes.js";
 import { swaggerServe, swaggerSetup } from "./swagger/index.js";
 const app = express();

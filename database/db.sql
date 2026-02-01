@@ -270,3 +270,20 @@ add column if not exists videos text[] default '{}';
 
 alter table blogs
 add column if not exists audios text[] default '{}';
+
+
+-- Fast admin dashboard
+create index if not exists idx_blogs_created_at
+on blogs (created_at desc);
+
+-- Fast author based queries
+create index if not exists idx_blogs_author_id
+on blogs (author_id);
+
+-- Fast public blog feed
+create index if not exists idx_blogs_status
+on blogs (status);
+
+create index if not exists idx_blogs_status_created
+on blogs (status, created_at desc);
+

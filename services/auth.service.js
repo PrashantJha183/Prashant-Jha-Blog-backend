@@ -39,7 +39,7 @@ const LOGIN_ALLOWED_ROLES = ["admin", "editor", "writer"];
    Send OTP (LOGIN ONLY)
 ========================= */
 export const sendOtpService = async (email) => {
-  // 1️⃣ Check user exists
+  // Check user exists
   const { data: user, error } = await supabase
     .from("profiles")
     .select("id, role")
@@ -52,18 +52,18 @@ export const sendOtpService = async (email) => {
     );
   }
 
-  // 2️⃣ Role validation
+  // Role validation
   if (!LOGIN_ALLOWED_ROLES.includes(user.role)) {
     throw new Error("Access denied. Role is not allowed to login.");
   }
 
-  // 3️⃣ Generate OTP
+  // Generate OTP
   const otp = generateOtp();
   const expiresAt = new Date(
     Date.now() + Number(process.env.OTP_EXPIRY_MINUTES) * 60 * 1000,
   );
 
-  // 4️⃣ Store OTP
+  // Store OTP
   const { error: otpError } = await supabase.from("email_otps").upsert({
     email,
     otp_hash: hashOtp(otp),
@@ -73,7 +73,7 @@ export const sendOtpService = async (email) => {
 
   if (otpError) throw otpError;
 
-  // 5️⃣ Send Email
+  // Send Email
   await transporter.sendMail({
     from: `"Blog Auth" <${process.env.SMTP_USER}>`,
     to: email,
@@ -92,7 +92,7 @@ export const sendOtpService = async (email) => {
    Verify OTP + ISSUE TOKENS
 ========================= */
 export const verifyOtpService = async ({ email, otp }) => {
-  // 1️⃣ Fetch OTP
+  // Fetch OTP
   const { data: otpRow, error } = await supabase
     .from("email_otps")
     .select("*")
@@ -103,12 +103,12 @@ export const verifyOtpService = async ({ email, otp }) => {
     throw new Error("Invalid or expired OTP");
   }
 
-  // 2️⃣ Expiry check
+  // Expiry check
   if (new Date(otpRow.expires_at) < new Date()) {
     throw new Error("OTP expired");
   }
 
-  // 3️⃣ Validate OTP
+  // Validate OTP
   if (otpRow.otp_hash !== hashOtp(otp)) {
     await supabase
       .from("email_otps")
@@ -118,7 +118,7 @@ export const verifyOtpService = async ({ email, otp }) => {
     throw new Error("Invalid OTP");
   }
 
-  // 4️⃣ Fetch EXISTING USER
+  // Fetch EXISTING USER
   const { data: user, error: userError } = await supabase
     .from("profiles")
     .select("id, email, name, role")
@@ -129,15 +129,15 @@ export const verifyOtpService = async ({ email, otp }) => {
     throw new Error("Access denied. User not found.");
   }
 
-  // 5️⃣ Role validation
+  // Role validation
   if (!LOGIN_ALLOWED_ROLES.includes(user.role)) {
     throw new Error("Access denied. Role is not allowed to login.");
   }
 
-  // 6️⃣ Cleanup OTP
+  // Cleanup OTP
   await supabase.from("email_otps").delete().eq("email", email);
 
-  // 7️⃣ Issue tokens
+  // Issue tokens
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken();
 

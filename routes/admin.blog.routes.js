@@ -4,12 +4,14 @@ import {
   updateBlog,
   deleteBlog,
   getAllBlogsAdmin,
-} from "../controllers/blog.controller.js";
+  removeBlogMedia,
+} from "../controllers/admin.blog.controller.js";
 
 import { protect } from "../middlewares/auth.middleware.js";
 import { allowRoles } from "../middlewares/rbac.middleware.js";
 import { upload } from "../middlewares/upload.middleware.js";
 import { validateMediaSize } from "../middlewares/mediaSize.middleware.js";
+import { optimizeMedia } from "../middlewares/mediaOptimize.middleware.js";
 
 const router = Router();
 
@@ -19,7 +21,7 @@ const router = Router();
    - Auth + RBAC enforced globally
 ========================================================= */
 
-// 🔐 Authentication + Role-based authorization
+// Authentication + Role-based authorization
 router.use(protect, allowRoles("admin"));
 
 /**
@@ -31,6 +33,7 @@ router.post(
   "/",
   upload.array("media", 5), // images/audio/video (max 5)
   validateMediaSize,
+  optimizeMedia,
   createBlog,
 );
 
@@ -43,10 +46,23 @@ router.get("/", getAllBlogsAdmin);
 
 /**
  * @route   PUT /api/admin/blogs/:id
- * @desc    Admin updates any blog
+ * @desc    Admin updates any blog (append media supported)
  * @access  Admin only
  */
-router.put("/:id", upload.array("media", 5), validateMediaSize, updateBlog);
+router.put(
+  "/:id",
+  upload.array("media", 5),
+  validateMediaSize,
+  optimizeMedia,
+  updateBlog,
+);
+
+/**
+ * @route   PATCH /api/admin/blogs/:id/media
+ * @desc    Admin removes specific media (images/videos/audios)
+ * @access  Admin only
+ */
+router.patch("/:id/media", removeBlogMedia);
 
 /**
  * @route   DELETE /api/admin/blogs/:id
