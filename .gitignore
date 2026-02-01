@@ -36,12 +36,7 @@ Thumbs.db
 *.swp
 *.swo
 
-# ===============================
-# Swagger
-# ===============================
-swagger/*.json
-swagger/*.yaml
-swagger/*.yml
+
 
 # ===============================
 # Uploads / Media (local only)

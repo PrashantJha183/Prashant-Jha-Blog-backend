@@ -1,0 +1,338 @@
+openapi: 3.0.3
+
+info:
+  title: Prashant Jha Blog
+  description: |
+    Role-based Blog Platform API  
+    - OTP based authentication  
+    - JWT access & refresh tokens  
+    - Admin controlled users & blogs  
+    - Public blog access without auth  
+    - Media (images/videos/audios) optional & editable anytime
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5000/api
+    description: Local server
+
+tags:
+  - name: Auth
+  - name: Admin Users
+  - name: Admin Blogs
+  - name: Public Blogs
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    SendOtp:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          example: admin@gmail.com
+
+    VerifyOtp:
+      type: object
+      required: [email, otp]
+      properties:
+        email:
+          type: string
+        otp:
+          type: string
+          example: "123456"
+
+    Blog:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+        images:
+          type: array
+          items:
+            type: string
+        videos:
+          type: array
+          items:
+            type: string
+        audios:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+---
+paths:
+  /auth/send-otp:
+    post:
+      tags: [Auth]
+      summary: Send OTP (existing users only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendOtp"
+      responses:
+        200:
+          description: OTP sent successfully
+
+  /auth/verify-otp:
+    post:
+      tags: [Auth]
+      summary: Verify OTP and issue tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyOtp"
+      responses:
+        200:
+          description: Login successful
+
+  /auth/refresh-token:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        200:
+          description: New access token issued
+
+  /admin/users:
+    post:
+      tags: [Admin Users]
+      security:
+        - BearerAuth: []
+      summary: Create editor or writer (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, role]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                role:
+                  type: string
+                  enum: [editor, writer]
+      responses:
+        201:
+          description: User created
+
+    get:
+      tags: [Admin Users]
+      security:
+        - BearerAuth: []
+      summary: Get all users
+      responses:
+        200:
+          description: Users list
+
+  /admin/users/{id}:
+    patch:
+      tags: [Admin Users]
+      security:
+        - BearerAuth: []
+      summary: Update user role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [admin, editor, writer]
+      responses:
+        200:
+          description: Role updated
+
+    delete:
+      tags: [Admin Users]
+      security:
+        - BearerAuth: []
+      summary: Delete user
+      responses:
+        200:
+          description: User deleted
+
+  /admin/blogs:
+    post:
+      tags: [Admin Blogs]
+      security:
+        - BearerAuth: []
+      summary: Create blog (Admin only)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [title, description]
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                status:
+                  type: string
+                  enum: [draft, published]
+                images:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                videos:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                audios:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        201:
+          description: Blog created
+
+    get:
+      tags: [Admin Blogs]
+      security:
+        - BearerAuth: []
+      summary: Get all blogs (Admin dashboard)
+      responses:
+        200:
+          description: Blogs list
+
+  /admin/blogs/{id}:
+    put:
+      tags: [Admin Blogs]
+      security:
+        - BearerAuth: []
+      summary: Update blog (append media supported)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                status:
+                  type: string
+                images:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                videos:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                audios:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        200:
+          description: Blog updated
+
+    delete:
+      tags: [Admin Blogs]
+      security:
+        - BearerAuth: []
+      summary: Delete blog (with media cleanup)
+      responses:
+        200:
+          description: Blog deleted
+
+  /admin/blogs/{id}/media:
+    patch:
+      tags: [Admin Blogs]
+      security:
+        - BearerAuth: []
+      summary: Remove specific media from blog
+      description: |
+        Remove selected images, videos, or audios from a blog.
+        Blog content remains unchanged.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, urls]
+              properties:
+                type:
+                  type: string
+                  enum: [images, videos, audios]
+                urls:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        200:
+          description: Media removed successfully
+
+  /public-blogs:
+    get:
+      tags: [Public Blogs]
+      summary: Get all published blogs (Public)
+      responses:
+        200:
+          description: Published blogs
