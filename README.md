@@ -152,7 +152,7 @@ GET /api/public-blogs
 ## API Documentation (Swagger)
 
 ```
-http://localhost:5000/api/docs
+https://prashant-jha-blog-backend-production.up.railway.app/api/docs
 ```
 
 Features:
