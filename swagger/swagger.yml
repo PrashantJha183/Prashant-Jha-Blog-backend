@@ -194,7 +194,7 @@ paths:
         200:
           description: User deleted
 
-  /admin/blogs:
+  /blogs:
     post:
       tags: [Admin Blogs]
       security:
@@ -243,7 +243,7 @@ paths:
         200:
           description: Blogs list
 
-  /admin/blogs/{id}:
+  /blogs/{id}:
     put:
       tags: [Admin Blogs]
       security:
@@ -295,7 +295,7 @@ paths:
         200:
           description: Blog deleted
 
-  /admin/blogs/{id}/media:
+  /blogs/{id}/media:
     patch:
       tags: [Admin Blogs]
       security:
