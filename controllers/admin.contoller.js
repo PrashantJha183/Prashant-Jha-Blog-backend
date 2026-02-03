@@ -13,10 +13,10 @@ export const createUserByAdmin = async (req, res) => {
     });
   }
 
-  if (!["editor", "writer"].includes(role)) {
+  if (!["editor", "writer", "admin"].includes(role)) {
     return res.status(400).json({
       success: false,
-      message: "Role must be editor or writer",
+      message: "Role must be editor,writer or admin",
     });
   }
 
@@ -54,7 +54,7 @@ export const getAllStaff = async (req, res) => {
   const { data, error } = await supabase
     .from("profiles")
     .select("id, name, email, role, created_at")
-    .in("role", ["editor", "writer"])
+    .in("role", ["editor", "writer", "admin"])
     .order("created_at", { ascending: false });
 
   if (error) throw error;
