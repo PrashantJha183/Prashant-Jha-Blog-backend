@@ -29,7 +29,9 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:4173",
   "https://prashant-jhadev.netlify.app",
+  "https:/www.prashant-jhadev.netlify.app",
   "https://prashantjhadev.in",
+  "https://www.prashantjhadev.in",
 ];
 
 app.use(
