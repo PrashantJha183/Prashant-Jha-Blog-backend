@@ -86,9 +86,13 @@ export const sendOtpService = async (email) => {
       `,
     });
 
-    console.log("✅ OTP email sent via Resend to:", email);
+    console.log("OTP email sent via Resend to:", email);
+    // After generating OTP
+    if (process.env.NODE_ENV === "production") {
+      console.log(`OTP for ${email}: ${otp}`);
+    }
   } catch (error) {
-    console.error("❌ Resend email failed:", error);
+    console.error("Resend email failed:", error);
     throw new Error("Failed to send OTP email");
   }
 
