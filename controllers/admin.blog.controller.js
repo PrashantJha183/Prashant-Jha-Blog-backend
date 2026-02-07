@@ -3,54 +3,98 @@ import crypto from "crypto";
 import path from "path";
 
 /* =========================================================
+   helpers
+========================================================= */
+const generateSlug = (title) =>
+  title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+/* =========================================================
    CREATE BLOG (ADMIN ONLY)
+   - supports real blog structure
+   - headings, paragraphs, media anywhere
 ========================================================= */
 export const createBlog = async (req, res) => {
   if (req.user.role !== "admin") {
-    return res.status(403).json({
-      success: false,
-      message: "Only admin can create blogs",
-    });
+    return res.status(403).json({ success: false, message: "Only admin" });
   }
 
-  const { title, description, status = "published" } = req.body;
+  const contentBlocks =
+    typeof req.body.content_blocks === "string"
+      ? JSON.parse(req.body.content_blocks)
+      : req.body.content_blocks || [];
 
-  if (!title || !description) {
+  const { title, status = "draft" } = req.body;
+
+  if (!title || !Array.isArray(contentBlocks)) {
     return res.status(400).json({
       success: false,
-      message: "Title and description are required",
+      message: "Title & content blocks are required",
     });
   }
 
-  const images = Array.isArray(req.body.images) ? req.body.images : [];
-  const videos = Array.isArray(req.body.videos) ? req.body.videos : [];
-  const audios = Array.isArray(req.body.audios) ? req.body.audios : [];
+  const slug = generateSlug(title);
 
-  if (req.files) {
-    for (const field of ["images", "videos", "audios"]) {
-      if (!req.files[field]) continue;
+  const fileMap = {};
+  (req.files || []).forEach((file) => {
+    fileMap[file.fieldname] = file;
+  });
 
-      for (const file of req.files[field]) {
-        const ext = path.extname(file.originalname);
-        const fileName = `${crypto.randomUUID()}${ext}`;
-        const filePath = `${field}/${fileName}`;
+  const processedBlocks = [];
 
-        const { error } = await supabase.storage
-          .from("Prashant_Jha_blog_media")
-          .upload(filePath, file.buffer, {
-            contentType: file.mimetype,
-          });
+  for (const block of contentBlocks) {
+    if (block.type === "heading" || block.type === "paragraph") {
+      processedBlocks.push({
+        id: crypto.randomUUID(),
+        type: block.type,
+        text: block.text || "",
+      });
+      continue;
+    }
 
-        if (error) throw error;
+    if (block.type === "media" && block.fileKey) {
+      const file = fileMap[block.fileKey];
+      if (!file) continue;
 
-        const { data } = supabase.storage
-          .from("Prashant_Jha_blog_media")
-          .getPublicUrl(filePath);
+      const ext = path.extname(file.originalname);
+      const fileName = `${crypto.randomUUID()}${ext}`;
+      const filePath = `blogs/${fileName}`;
 
-        if (field === "images") images.push(data.publicUrl);
-        if (field === "videos") videos.push(data.publicUrl);
-        if (field === "audios") audios.push(data.publicUrl);
-      }
+      const { error } = await supabase.storage
+        .from("Prashant_Jha_blog_media")
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+        });
+
+      if (error) throw error;
+
+      const { data } = supabase.storage
+        .from("Prashant_Jha_blog_media")
+        .getPublicUrl(filePath);
+
+      processedBlocks.push({
+        id: crypto.randomUUID(),
+        type: "media",
+        media: {
+          url: data.publicUrl,
+          fileType: file.mimetype.includes("pdf") ? "pdf" : "image",
+        },
+      });
+      continue;
+    }
+
+    if (block.type === "media" && block.media?.url) {
+      processedBlocks.push({
+        id: crypto.randomUUID(),
+        type: "media",
+        media: {
+          url: block.media.url,
+          fileType: block.media.fileType || "image",
+        },
+      });
     }
   }
 
@@ -58,11 +102,9 @@ export const createBlog = async (req, res) => {
     .from("blogs")
     .insert({
       title,
-      description,
+      slug,
       status,
-      images,
-      videos,
-      audios,
+      content_blocks: processedBlocks,
       author_id: req.user.id,
     })
     .select()
@@ -70,15 +112,11 @@ export const createBlog = async (req, res) => {
 
   if (error) throw error;
 
-  res.status(201).json({
-    success: true,
-    blog: data,
-  });
+  res.status(201).json({ success: true, blog: data });
 };
 
 /* =========================================================
    UPDATE BLOG (ADMIN ONLY)
-   - append media
 ========================================================= */
 export const updateBlog = async (req, res) => {
   if (req.user.role !== "admin") {
@@ -90,9 +128,16 @@ export const updateBlog = async (req, res) => {
 
   const { id } = req.params;
 
+  const contentBlocks =
+    typeof req.body.content_blocks === "string"
+      ? JSON.parse(req.body.content_blocks)
+      : req.body.content_blocks || [];
+
+  const { title, status } = req.body;
+
   const { data: existingBlog, error: fetchError } = await supabase
     .from("blogs")
-    .select("images, videos, audios")
+    .select("content_blocks")
     .eq("id", id)
     .single();
 
@@ -103,58 +148,71 @@ export const updateBlog = async (req, res) => {
     });
   }
 
-  const updatePayload = { updated_at: new Date() };
+  const fileMap = {};
+  (req.files || []).forEach((file) => {
+    fileMap[file.fieldname] = file;
+  });
 
-  if (req.body.title) updatePayload.title = req.body.title;
-  if (req.body.description) updatePayload.description = req.body.description;
-  if (req.body.status) updatePayload.status = req.body.status;
+  const updatedBlocks = [];
 
-  const images = [
-    ...(existingBlog.images || []),
-    ...(Array.isArray(req.body.images) ? req.body.images : []),
-  ];
+  for (const block of contentBlocks) {
+    if (block._delete === true) {
+      if (block.type === "media" && block.media?.url) {
+        const storagePath = block.media.url.split(
+          "/object/public/Prashant_Jha_blog_media/",
+        )[1];
 
-  const videos = [
-    ...(existingBlog.videos || []),
-    ...(Array.isArray(req.body.videos) ? req.body.videos : []),
-  ];
-
-  const audios = [
-    ...(existingBlog.audios || []),
-    ...(Array.isArray(req.body.audios) ? req.body.audios : []),
-  ];
-
-  if (req.files) {
-    for (const field of ["images", "videos", "audios"]) {
-      if (!req.files[field]) continue;
-
-      for (const file of req.files[field]) {
-        const ext = path.extname(file.originalname);
-        const fileName = `${crypto.randomUUID()}${ext}`;
-        const filePath = `${field}/${fileName}`;
-
-        const { error } = await supabase.storage
-          .from("Prashant_Jha_blog_media")
-          .upload(filePath, file.buffer, {
-            contentType: file.mimetype,
-          });
-
-        if (error) throw error;
-
-        const { data } = supabase.storage
-          .from("Prashant_Jha_blog_media")
-          .getPublicUrl(filePath);
-
-        if (field === "images") images.push(data.publicUrl);
-        if (field === "videos") videos.push(data.publicUrl);
-        if (field === "audios") audios.push(data.publicUrl);
+        if (storagePath) {
+          await supabase.storage
+            .from("Prashant_Jha_blog_media")
+            .remove([storagePath]);
+        }
       }
+      continue;
     }
+
+    if (!block.fileKey) {
+      updatedBlocks.push(block);
+      continue;
+    }
+
+    const file = fileMap[block.fileKey];
+    if (!file) continue;
+
+    const ext = path.extname(file.originalname);
+    const fileName = `${crypto.randomUUID()}${ext}`;
+    const filePath = `blogs/${fileName}`;
+
+    await supabase.storage
+      .from("Prashant_Jha_blog_media")
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+      });
+
+    const { data } = supabase.storage
+      .from("Prashant_Jha_blog_media")
+      .getPublicUrl(filePath);
+
+    updatedBlocks.push({
+      id: crypto.randomUUID(),
+      type: "media",
+      media: {
+        url: data.publicUrl,
+        fileType: file.mimetype.includes("pdf") ? "pdf" : "image",
+      },
+    });
   }
 
-  updatePayload.images = images;
-  updatePayload.videos = videos;
-  updatePayload.audios = audios;
+  const updatePayload = {
+    updated_at: new Date(),
+    content_blocks: updatedBlocks,
+  };
+
+  if (title) {
+    updatePayload.title = title;
+    updatePayload.slug = generateSlug(title);
+  }
+  if (status) updatePayload.status = status;
 
   const { data, error } = await supabase
     .from("blogs")
@@ -169,77 +227,6 @@ export const updateBlog = async (req, res) => {
 };
 
 /* =========================================================
-   REMOVE SPECIFIC MEDIA (ADMIN ONLY)
-========================================================= */
-export const removeBlogMedia = async (req, res) => {
-  if (req.user.role !== "admin") {
-    return res.status(403).json({
-      success: false,
-      message: "Only admin can remove media",
-    });
-  }
-
-  const { id } = req.params;
-  const { type, urls } = req.body;
-
-  if (!["images", "videos", "audios"].includes(type)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid media type",
-    });
-  }
-
-  if (!Array.isArray(urls) || !urls.length) {
-    return res.status(400).json({
-      success: false,
-      message: "URLs are required",
-    });
-  }
-
-  const { data: blog, error } = await supabase
-    .from("blogs")
-    .select("images, videos, audios")
-    .eq("id", id)
-    .single();
-
-  if (error || !blog) {
-    return res.status(404).json({
-      success: false,
-      message: "Blog not found",
-    });
-  }
-
-  const updatedMedia = (blog[type] || []).filter((url) => !urls.includes(url));
-
-  const storagePaths = urls
-    .filter((url) => url.includes("/storage/v1/object/public/"))
-    .map((url) => url.split("/object/public/Prashant_Jha_blog_media/")[1])
-    .filter(Boolean);
-
-  if (storagePaths.length) {
-    await supabase.storage.from("Prashant_Jha_blog_media").remove(storagePaths);
-  }
-
-  const { data: updatedBlog, error: updateError } = await supabase
-    .from("blogs")
-    .update({
-      [type]: updatedMedia,
-      updated_at: new Date(),
-    })
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (updateError) throw updateError;
-
-  res.json({
-    success: true,
-    message: "Media removed successfully",
-    blog: updatedBlog,
-  });
-};
-
-/* =========================================================
    DELETE BLOG (ADMIN ONLY)
 ========================================================= */
 export const deleteBlog = async (req, res) => {
@@ -251,20 +238,27 @@ export const deleteBlog = async (req, res) => {
 
   const { data: blog } = await supabase
     .from("blogs")
-    .select("images, videos, audios")
+    .select("content_blocks")
     .eq("id", id)
     .single();
 
-  const filesToDelete = [
-    ...(blog?.images || []),
-    ...(blog?.videos || []),
-    ...(blog?.audios || []),
-  ];
+  if (!blog) {
+    return res.status(404).json({ success: false, message: "Blog not found" });
+  }
 
-  if (filesToDelete.length) {
-    await supabase.storage
-      .from("Prashant_Jha_blog_media")
-      .remove(filesToDelete);
+  const mediaPaths = [];
+
+  for (const block of blog.content_blocks || []) {
+    if (block.type === "media" && block.media?.url) {
+      const path = block.media.url.split(
+        "/object/public/Prashant_Jha_blog_media/",
+      )[1];
+      if (path) mediaPaths.push(path);
+    }
+  }
+
+  if (mediaPaths.length) {
+    await supabase.storage.from("Prashant_Jha_blog_media").remove(mediaPaths);
   }
 
   await supabase.from("blogs").delete().eq("id", id);
@@ -274,6 +268,7 @@ export const deleteBlog = async (req, res) => {
 
 /* =========================================================
    READ ALL BLOGS (ADMIN DASHBOARD)
+   - cursor based pagination (FAST)
 ========================================================= */
 export const getAllBlogsAdmin = async (req, res) => {
   if (req.user.role !== "admin") {
@@ -283,19 +278,20 @@ export const getAllBlogsAdmin = async (req, res) => {
     });
   }
 
-  const { data, error } = await supabase
+  const limit = Math.min(Number(req.query.limit) || 10, 50);
+  const cursor = req.query.cursor || null;
+
+  let query = supabase
     .from("blogs")
     .select(
       `
       id,
       title,
-      description,
+      slug,
       status,
       created_at,
       updated_at,
-      images,
-      videos,
-      audios,
+      content_blocks,
       profiles!blogs_author_id_fkey (
         id,
         name,
@@ -304,9 +300,29 @@ export const getAllBlogsAdmin = async (req, res) => {
       )
     `,
     )
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(limit + 1);
+
+  if (cursor) {
+    query = query.lt("created_at", cursor);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
-  res.json({ success: true, blogs: data });
+  let nextCursor = null;
+  let blogs = data;
+
+  if (data.length > limit) {
+    const last = data[limit - 1];
+    nextCursor = last.created_at;
+    blogs = data.slice(0, limit);
+  }
+
+  res.json({
+    success: true,
+    nextCursor,
+    blogs,
+  });
 };

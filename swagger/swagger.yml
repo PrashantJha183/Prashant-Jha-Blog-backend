@@ -1,18 +1,22 @@
 openapi: 3.0.3
 
 info:
-  title: Prashant Jha Blog
+  title: Prashant Jha Blog API
   description: |
-    Role-based Blog Platform API  
-    - OTP based authentication  
-    - JWT access & refresh tokens  
-    - Admin controlled users & blogs  
-    - Public blog access without auth  
-    - Media (images/videos/audios) optional & editable anytime
-  version: 1.0.0
+    Production-ready Role-based Blog Platform API
+
+    Features:
+    - OTP based authentication
+    - JWT access & refresh tokens
+    - Admin-controlled users & blogs
+    - Real blog editor (content blocks)
+    - Media upload (image/pdf) with preview
+    - Cursor-based pagination
+    - Public blog access via shareable slug
+  version: 2.0.0
 
 servers:
-  - url: prashant-jha-blog-backend-production.up.railway.app/api
+  - url: https://prashant-jha-blog-backend-production.up.railway.app/api
     description: Production server
 
 tags:
@@ -47,6 +51,25 @@ components:
           type: string
           example: "123456"
 
+    ContentBlock:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [heading, paragraph, media]
+        text:
+          type: string
+        media:
+          type: object
+          properties:
+            url:
+              type: string
+            fileType:
+              type: string
+              enum: [image, pdf]
+
     Blog:
       type: object
       properties:
@@ -54,23 +77,15 @@ components:
           type: string
         title:
           type: string
-        description:
+        slug:
           type: string
         status:
           type: string
           enum: [draft, published]
-        images:
+        content_blocks:
           type: array
           items:
-            type: string
-        videos:
-          type: array
-          items:
-            type: string
-        audios:
-          type: array
-          items:
-            type: string
+            $ref: "#/components/schemas/ContentBlock"
         created_at:
           type: string
         updated_at:
@@ -129,7 +144,7 @@ paths:
       tags: [Admin Users]
       security:
         - BearerAuth: []
-      summary: Create editor or writer (Admin only)
+      summary: Create editor or writer
       requestBody:
         required: true
         content:
@@ -206,30 +221,19 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [title, description]
+              required: [title, content_blocks]
               properties:
                 title:
-                  type: string
-                description:
                   type: string
                 status:
                   type: string
                   enum: [draft, published]
-                images:
-                  type: array
-                  items:
-                    type: string
-                    format: binary
-                videos:
-                  type: array
-                  items:
-                    type: string
-                    format: binary
-                audios:
-                  type: array
-                  items:
-                    type: string
-                    format: binary
+                content_blocks:
+                  type: string
+                  description: JSON string of content blocks
+                file_0:
+                  type: string
+                  format: binary
       responses:
         201:
           description: Blog created
@@ -238,7 +242,16 @@ paths:
       tags: [Admin Blogs]
       security:
         - BearerAuth: []
-      summary: Get all blogs (Admin dashboard)
+      summary: Get all blogs (cursor-based)
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          schema:
+            type: string
       responses:
         200:
           description: Blogs list
@@ -248,7 +261,7 @@ paths:
       tags: [Admin Blogs]
       security:
         - BearerAuth: []
-      summary: Update blog (append media supported)
+      summary: Update blog
       parameters:
         - name: id
           in: path
@@ -263,25 +276,13 @@ paths:
               properties:
                 title:
                   type: string
-                description:
-                  type: string
                 status:
                   type: string
-                images:
-                  type: array
-                  items:
-                    type: string
-                    format: binary
-                videos:
-                  type: array
-                  items:
-                    type: string
-                    format: binary
-                audios:
-                  type: array
-                  items:
-                    type: string
-                    format: binary
+                content_blocks:
+                  type: string
+                file_0:
+                  type: string
+                  format: binary
       responses:
         200:
           description: Blog updated
@@ -290,49 +291,40 @@ paths:
       tags: [Admin Blogs]
       security:
         - BearerAuth: []
-      summary: Delete blog (with media cleanup)
+      summary: Delete blog (media cleaned)
       responses:
         200:
           description: Blog deleted
 
-  /blogs/{id}/media:
-    patch:
-      tags: [Admin Blogs]
-      security:
-        - BearerAuth: []
-      summary: Remove specific media from blog
-      description: |
-        Remove selected images, videos, or audios from a blog.
-        Blog content remains unchanged.
+  /blogs:
+    get:
+      tags: [Public Blogs]
+      summary: Get published blogs (cursor-based)
       parameters:
-        - name: id
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Published blogs
+
+  /blogs/{slug}:
+    get:
+      tags: [Public Blogs]
+      summary: Get published blog by slug
+      parameters:
+        - name: slug
           in: path
           required: true
           schema:
             type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [type, urls]
-              properties:
-                type:
-                  type: string
-                  enum: [images, videos, audios]
-                urls:
-                  type: array
-                  items:
-                    type: string
       responses:
         200:
-          description: Media removed successfully
-
-  /public-blogs:
-    get:
-      tags: [Public Blogs]
-      summary: Get all published blogs (Public)
-      responses:
-        200:
-          description: Published blogs
+          description: Blog details
+        404:
+          description: Blog not found

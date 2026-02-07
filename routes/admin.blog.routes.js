@@ -4,7 +4,6 @@ import {
   updateBlog,
   deleteBlog,
   getAllBlogsAdmin,
-  removeBlogMedia,
 } from "../controllers/admin.blog.controller.js";
 
 import { protect } from "../middlewares/auth.middleware.js";
@@ -26,12 +25,13 @@ router.use(protect, allowRoles("admin"));
 
 /**
  * @route   POST /api/admin/blogs
- * @desc    Admin creates & publishes a blog
+ * @desc    Admin creates a blog with real content structure
+ *          (headings, paragraphs, images, PDFs)
  * @access  Admin only
  */
 router.post(
   "/",
-  upload.array("media", 5), // images/audio/video (max 5)
+  upload.any(), // dynamic media per content block
   validateMediaSize,
   optimizeMedia,
   createBlog,
@@ -39,34 +39,25 @@ router.post(
 
 /**
  * @route   GET /api/admin/blogs
- * @desc    Admin fetches all blogs (own + editor + writer)
+ * @desc    Admin fetches all blogs
  * @access  Admin only
  */
 router.get("/", getAllBlogsAdmin);
 
 /**
  * @route   PUT /api/admin/blogs/:id
- * @desc    Admin updates any blog (append media supported)
+ * @desc    Admin updates blog
+ *          - edit text
+ *          - add media
+ *          - remove media
+ *          - reorder blocks
  * @access  Admin only
  */
-router.put(
-  "/:id",
-  upload.array("media", 5),
-  validateMediaSize,
-  optimizeMedia,
-  updateBlog,
-);
-
-/**
- * @route   PATCH /api/admin/blogs/:id/media
- * @desc    Admin removes specific media (images/videos/audios)
- * @access  Admin only
- */
-router.patch("/:id/media", removeBlogMedia);
+router.put("/:id", upload.any(), validateMediaSize, optimizeMedia, updateBlog);
 
 /**
  * @route   DELETE /api/admin/blogs/:id
- * @desc    Admin deletes any blog
+ * @desc    Admin deletes blog & all associated media
  * @access  Admin only
  */
 router.delete("/:id", deleteBlog);

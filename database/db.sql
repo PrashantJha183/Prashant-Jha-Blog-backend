@@ -287,3 +287,14 @@ on blogs (status);
 create index if not exists idx_blogs_status_created
 on blogs (status, created_at desc);
 
+
+ALTER TABLE blogs
+ADD COLUMN content_blocks JSONB NOT NULL DEFAULT '[]';
+
+ALTER TABLE blogs
+ADD COLUMN slug TEXT UNIQUE;
+
+ALTER TABLE blogs ALTER COLUMN description DROP NOT NULL;
+
+CREATE INDEX blogs_published_created_at_idx
+ON blogs (status, created_at DESC);
